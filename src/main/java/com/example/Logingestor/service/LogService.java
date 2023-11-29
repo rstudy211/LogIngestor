@@ -1,158 +1,87 @@
 package com.example.Logingestor.service;
 
-import co.elastic.clients.elasticsearch.ElasticsearchClient;
-import co.elastic.clients.elasticsearch._types.query_dsl.MatchQuery;
-import co.elastic.clients.elasticsearch._types.query_dsl.Query;
-import co.elastic.clients.elasticsearch.core.SearchRequest;
-import co.elastic.clients.elasticsearch.core.SearchResponse;
-import co.elastic.clients.elasticsearch.core.search.Hit;
-import co.elastic.clients.util.ObjectBuilder;
-import com.example.Logingestor.model.LogDocument;
 import com.example.Logingestor.model.LogModel;
-import com.example.Logingestor.repository.LogDocumentRepository;
 import com.example.Logingestor.repository.LogEntryRepository;
-import com.example.Logingestor.util.ElasticSearchUtil;
+import com.example.Logingestor.util.LogEntrySpecification;
 import lombok.RequiredArgsConstructor;
-import org.elasticsearch.client.RequestOptions;
-import org.elasticsearch.index.query.*;
-import org.elasticsearch.search.builder.SearchSourceBuilder;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.elasticsearch.client.elc.ElasticsearchTemplate;
-import org.springframework.data.elasticsearch.client.elc.NativeQuery;
-import org.springframework.data.elasticsearch.client.elc.NativeQueryBuilder;
-import org.springframework.data.elasticsearch.client.erhlc.NativeSearchQuery;
-import org.springframework.data.elasticsearch.client.erhlc.NativeSearchQueryBuilder;
-import org.springframework.data.elasticsearch.core.SearchHit;
-import org.springframework.data.elasticsearch.core.SearchHits;
-import org.springframework.data.elasticsearch.core.mapping.IndexCoordinates;
-import org.springframework.data.elasticsearch.core.query.MoreLikeThisQuery;
-import org.springframework.http.ResponseEntity;
+import org.springframework.data.domain.Example;
+import org.springframework.data.domain.ExampleMatcher;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 
-import java.io.IOException;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Function;
-import java.util.function.Supplier;
-
-import static co.elastic.clients.elasticsearch._types.query_dsl.QueryBuilders.regexp;
-import static org.elasticsearch.index.query.QueryBuilders.matchQuery;
-import static org.elasticsearch.index.query.QueryBuilders.regexpQuery;
 
 @Service
 @RequiredArgsConstructor
 public class LogService {
 
     @Autowired
-    private final LogDocumentRepository logDocumentRepository;
+    private  final LogEntryRepository logEntryRepository;
 
-//    @Autowired
-//    private final LogEntryRepository logEntryRepository;
-
-    @Autowired
-    private ElasticsearchClient elasticsearchClient;
-
-    private ElasticsearchTemplate elasticsearchTemplate;
-//    @Autowired
-//    public  LogService(LogEntryRepository logEntryRepository, LogDocumentRepository logDocumentRepository) {
-//        this.logEntryRepository = logEntryRepository;
-//        this.logDocumentRepository = logDocumentRepository;
-//    }
-
-    public void ingestLog(LogModel logEntry) {
-        // Save to PostgreSQL
-//        logEntryRepository.save(logEntry);
-
-        // Save to Elasticsearch
-        LogDocument logDocument = convertToLogDocument(logEntry);
-        logDocumentRepository.save(logDocument);
+    public void ingestLog(LogModel logModel) {
+        logEntryRepository.save(logModel);
     }
 
-    private LogDocument convertToLogDocument(LogModel logModel) {
-        // Convert LogEntry to LogDocument
-        // Implement the conversion logic based on your requirements
-        LogModel.MetaData metaData = logModel.getMetaData();
-        String parentResourceId = metaData != null ? metaData.getParentResourceId() : null;
-
-        // Convert timestamp from string to Instant
-
-        return LogDocument.builder()
-                .level(logModel.getLevel())
-                .message(logModel.getMessage())
-                .resourceId(logModel.getResourceId())
-                .timestamp(logModel.getTimestamp())
-                .traceId(logModel.getTraceId())
-                .spanId(logModel.getSpanId())
-                .commit(logModel.getCommit())
-                .parentResourceId(parentResourceId)
-                .build();
-    }
-
-//    public List<LogDocument> searchLogs(String query, Map<String, String> filters) {
-//        BoolQueryBuilder boolQueryBuilder = QueryBuilders.boolQuery();
-//
-////        Add full text search query
-//        if (query != null && !query.isEmpty()){
-//            boolQueryBuilder.must(QueryBuilders.queryStringQuery(query));
-//        }
-////        Add filters
-//        for(Map.Entry<String, String> entry: filters.entrySet()){
-//            String field  = entry.getKey();
-//            String value = entry.getValue();
-//
-//            if (value!= null && !value.isEmpty()){
-//                if("timestamp".equals(field)){
-//                    RangeQueryBuilder rangeQueryBuilder = QueryBuilders.rangeQuery(field)
-//                            .from(Instant.parse(value).toString())
-//                            .to(Instant.parse(value).plusSeconds(1).toString());
-//                    boolQueryBuilder.must(rangeQueryBuilder);
-//                } else {
-//                    // Add term query for other fields
-//                    boolQueryBuilder.must(new TermQueryBuilder(field, value));
-//
-//                }
+    public List<LogModel> matchLogWithFilters(String query, Map<String, String> filters) {
+        if ( query.isEmpty()  && filters.isEmpty()){
+            return logEntryRepository.findAll();
+        }
+        if (filters.isEmpty()){
+            return logEntryRepository.findAllByQuery(query);
+        }
+//        List<LogModel> logModels = new ArrayList<>();
+//        for (Map.Entry<String, String> entry : filters.entrySet()) {
+//            switch (entry.getKey()) {
+//                case "level":
+//                    logModels.addAll(logEntryRepository.findByLevel(entry.getValue()));
+//                    break;
+//                case "message":
+//                    logModels.addAll(logEntryRepository.findByMessage(entry.getValue()));
+//                    break;
+//                case "resourceId":
+//                    logModels.addAll(logEntryRepository.findByResourceId(entry.getValue()));
+//                    break;
+//                case "spanId":
+//                    logModels.addAll(logEntryRepository.findBySpanId(entry.getValue()));
+//                    break;
+//                case "commit":
+//                    logModels.addAll(logEntryRepository.findByCommit(entry.getValue()));
+//                    break;
+//                case "traceId":
+//                    logModels.addAll(logEntryRepository.findByTraceId(entry.getValue()));
+//                    break;
+//                // add more cases as needed
+//                default:
+//                    // handle default case if needed
+//                    break;
 //            }
 //        }
-//
-////        QueryBuilder qb1 = QueryBuilders.matchQuery("level", "error");
-////
-////        System.out.println(qb1.toString());
-////
-//
-//
-//        boolQueryBuilder.must(QueryBuilders.matchQuery("level", "error"));
-//
-//        // Build NativeSearchQuery
-////        NativeSearchQuery searchQuery = new NativeSearchQueryBuilder().withQuery(boolQueryBuilder).build();
-////        SearchHits<LogDocument> searchHits = elasticsearchTemplate.search(searchQuery, LogDocument.class);
-////
-//
-//        return searchHits.stream().map(SearchHit::getContent).toList();
-//    }
 
-    public SearchResponse<LogDocument> matchLogWithLevelField(String fieldValue) throws IOException {
-        Supplier<Query> supplier = ElasticSearchUtil.supplierWithLevelField(fieldValue);
-        System.out.println("elastic search query is"+ supplier.get().toString());
 
-        SearchResponse<LogDocument> searchResponse = elasticsearchClient.search(s->s.index("logs-index").query(supplier.get()),LogDocument.class);
-        return searchResponse;
+//        return  logEntryRepository.findAllByQueryAndFilters(query,filters);
+
+        return findByFilters(filters);
     }
 
-    public List<LogDocument> matchLogWithFilters(String query, Map<String,String> filters) throws IOException {
-        Supplier<Query> supplier = ElasticSearchUtil.supplierQueryForBoolQuery(filters);
-        System.out.println("elastic search query is"+ supplier.get().toString());
+    public List<LogModel> findByFilters(Map<String, String> filters) {
+        LogModel exampleEntity = new LogModel();
+        exampleEntity.setLevel(filters.getOrDefault("level", null));
+        exampleEntity.setMessage(filters.getOrDefault("message", null));
+        exampleEntity.setResourceId(filters.getOrDefault("resourceId", null));
+        exampleEntity.setSpanId(filters.getOrDefault("spanId", null));
 
-        SearchResponse<LogDocument> searchResponse = elasticsearchClient.search(s->s.index("logs-index").query(supplier.get()),LogDocument.class);
-        List<Hit<LogDocument>> listOfHits = searchResponse.hits().hits();
-        List<LogDocument> listOfLogDocuments = new ArrayList<>();
-        for (Hit<LogDocument> hit : listOfHits) {
-            listOfLogDocuments.add(hit.source());
-        }
-        return listOfLogDocuments;
-    }
-    public Iterable<LogDocument> getAllLogs() {
-        return logDocumentRepository.findAll();
+        ExampleMatcher exampleMatcher = ExampleMatcher.matching()
+                .withIgnorePaths("id")  // Ignore the 'id' field during matching
+                .withIgnoreCase()
+                .withStringMatcher(ExampleMatcher.StringMatcher.CONTAINING); // Use CONTAINING for partial matching
+
+        Example<LogModel> example = Example.of(exampleEntity,exampleMatcher);
+
+
+        return logEntryRepository.findAll(example);
     }
 }
